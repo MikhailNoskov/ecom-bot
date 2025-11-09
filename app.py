@@ -32,10 +32,6 @@ class CliBot:
         )
 
     @classmethod
-    def  __get_session_uuid(cls):
-        return uuid.uuid4()
-
-    @classmethod
     def __update_system_prompt(cls):
         with open('data/faq.json', 'r', encoding='utf-8') as f:
             faq_data_obj = json.load(f)
