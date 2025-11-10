@@ -84,8 +84,7 @@ class CliBot:
                 break
             if msg in ("сброс", "обновить"):
                 if self.session_uuid in self.history_store:
-                    self.__update_system_prompt()
-                    del self.history_store[self.session_uuid]
+                    self.__init__(self.session_uuid)
                 print("Бот: Контекст диалога очищен.")
                 logging.info("Пользователь сбросил контекст.")
                 continue
