@@ -156,6 +156,7 @@ class CliBot:
                     )
                 finally:
                     continue
+            #Model reply
             try:
                 response = self.chain_with_history.invoke(
                     {"question": user_text},
