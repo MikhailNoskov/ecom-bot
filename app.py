@@ -88,67 +88,72 @@ class CliBot:
             f"Чат-бот запущен {os.getenv('BRAND_NAME', 'No name')}! Можете задавать вопросы. \n - Для выхода введите 'выход'.\n - Для очистки контекста введите 'сброс'.\n")
         self.logger.info(f"=== New session {self.session_uuid}===")
         while True:
-            user_text = None
+            #User input
             try:
-                user_text = input("Вы: ").strip()
+                user_text = self._process_user_input()
+                if not user_text:
+                    continue
             except (KeyboardInterrupt, EOFError):
-                print("\nБот: Завершение работы.")
                 break
-            except UnicodeDecodeError as err:
-                self.logger.error(
-                    err,
-                    extra={"event": "error"})
-                pass
-            if not user_text:
+            except UnicodeDecodeError:
                 continue
-            self.logger.info(
-                user_text,
-                extra={"event": "user input"}
-            )
+            except Exception as err:
+                self._chat_and_log(
+                    event="error",
+                    msg=f"\nБот: Завершение работы из-за ошибки {str(err)}",
+                    err_msg=str(err),
+                    log_level=logging.ERROR
+                )
+                break
+            #Reply without model
             msg = user_text.lower()
             if msg in ("выход", "стоп", "конец"):
-                print("Бот: До свидания!")
-                logging.info(
-                    "Бот: До свидания!",
-                    extra={"event": "bot reply"}
+                self._chat_and_log(
+                    event="bot_reply",
+                    msg="Бот: До свидания!"
                 )
-                logging.info({"event": "User session end"})
+                self.logger.info({"event": "User session end"})
                 break
             if msg in ("сброс", "обновить"):
                 if self.session_uuid in self.history_store:
                     self.__init__(self.session_uuid)
-                print("Бот: Контекст диалога очищен.")
-                self.logger.info("dialog context cleared")
+                self._chat_and_log(
+                    event="context_reset",
+                    msg="Бот: Контекст диалога очищен."
+                )
                 continue
             faq_matching_entry = next((item for item in self.__faq if item["q"] == user_text), None)
             if faq_matching_entry:
-                self.logger.info(
-                    faq_matching_entry.get("a", None),
-                    extra={"event": "faq reply"})
-                print(f"Бот: {faq_matching_entry.get('a', None)}")
+                self._chat_and_log(
+                    event="faq_reply",
+                    msg=f"Бот: {faq_matching_entry.get('a', None)}"
+                )
                 continue
             if user_text.startswith("/orders"):
                 try:
                     order_number = user_text.split(" ")[1]
                     if order_number.isdigit() and order_number in self.__orders:
-                        self.logger.info(
-                            self.__orders.get(order_number, None),
-                            extra={"event": "faq reply"})
-                        print(f"Бот: {self.__orders.get(order_number, None)}")
+                        self._chat_and_log(
+                            event="order_reply",
+                            msg=f"Бот: {self.__orders.get(order_number, None)}"
+                        )
                     else:
-                        self.logger.info(
-                            "No order info",
-                            extra={"event": "faq reply"})
-                        print("Бот: No order info")
+                        self._chat_and_log(
+                            event="order_reply",
+                            msg=f"Бот: No order info"
+                        )
                 except KeyError as err:
-                    self.logger.error(
-                        err,
-                        extra={"event": "error"})
+                    self._chat_and_log(
+                        event="error",
+                        err_msg=str(err),
+                        log_level=logging.ERROR
+                    )
                 except Exception as err:
-                    self.logger.error(
-                        err,
-                        extra={"event": "error"})
-                    print(f"[Ошибка] {err}")
+                    self._chat_and_log(
+                        event="error",
+                        err_msg=str(err),
+                        log_level=logging.ERROR
+                    )
                 finally:
                     continue
             try:
@@ -157,20 +162,68 @@ class CliBot:
                     {"configurable": {"session_id": self.session_uuid}}
                 )
             except Exception as err:
-                self.logger.error(
-                    err,
-                    extra={"event": "error"})
-                print(f"[Ошибка] {err}")
+                self._chat_and_log(
+                    event="error",
+                    err_msg=str(err),
+                    log_level=logging.ERROR
+                )
                 continue
             bot_reply = response.content.strip()
             response_meta = response.response_metadata.get("token_usage", None)
             if response_meta is not None:
                 del response_meta["completion_tokens_details"]
                 del response_meta["prompt_tokens_details"]
+            self._chat_and_log(
+                event="bot_reply",
+                msg=f"Бот: {bot_reply}",
+                usage=response_meta
+            )
+
+    def _chat_and_log(
+            self,
+            event: str,
+            msg: str = None,
+            err_msg: str = None,
+            usage: dict = None,
+            log_level=logging.INFO
+    ):
+        if log_level == logging.INFO:
+            print(msg)
             self.logger.info(
-                bot_reply,
-                extra={"event": "bot reply", "usage": response_meta})
-            print(f"Бот: {bot_reply}")
+                msg,
+                extra={"event": f"{event}", "usage": usage}
+            )
+        else:
+            print(msg or err_msg, file=sys.stderr)
+            self.logger.error(
+                err_msg,
+                extra={"event": f"{event}"}
+            )
+
+    def _process_user_input(self):
+        user_text = None
+        try:
+            user_text = input("Вы: ").strip()
+            self.logger.info(
+                user_text,
+                extra={"event": "user_input"}
+            )
+        except (KeyboardInterrupt, EOFError):
+            self._chat_and_log(
+                event="bot_reply",
+                msg="\nБот: Завершение работы."
+            )
+            self.logger.info({"event": "User session end"})
+            raise
+        except UnicodeDecodeError as err:
+            self._chat_and_log(
+                event="bot error",
+                msg="\nБот: Проблемы с кодировкой",
+                err_msg=str(err),
+                log_level=logging.ERROR
+            )
+            raise
+        return user_text
 
     @classmethod
     def __get_faq_info(cls):
