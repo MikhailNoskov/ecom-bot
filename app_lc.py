@@ -58,10 +58,10 @@ class CliBot:
         )
         self.session_uuid = session_id
         self.history_store = {}
-        self.__faq = self.__get_faq_info()
-        self.__orders = self.__get_orders_info()
-        self.__style = self.__get_style()
-        self.prompt = self.__update_system_prompt()
+        self._faq = self._get_faq_info()
+        self._orders = self._get_orders_info()
+        self._style = self._get_style()
+        self.prompt = self._update_system_prompt()
         self.chain = self.prompt | self.chat_model
         self.chain_with_history = RunnableWithMessageHistory(
             self.chain,
@@ -72,20 +72,20 @@ class CliBot:
         self.logger = setup_jsonl_logger(self.session_uuid)
 
     @classmethod
-    def __get_style(cls):
+    def _get_style(cls):
         return StyleSchema(**STYLE)
 
-    def __update_system_prompt(self):
-        faq_data_escaped = json.dumps(self.__faq, ensure_ascii=False, indent=2).replace('{', '{{').replace('}', '}}')
-        orders_data_escaped = json.dumps(self.__orders, ensure_ascii=False, indent=2).replace('{', '{{').replace('}',
+    def _update_system_prompt(self):
+        faq_data_escaped = json.dumps(self._faq, ensure_ascii=False, indent=2).replace('{', '{{').replace('}', '}}')
+        orders_data_escaped = json.dumps(self._orders, ensure_ascii=False, indent=2).replace('{', '{{').replace('}',
                                                                                                                    '}}')
         system_prompt = f'''
-            {self.__style.tone.role} бренда {self.__style.brand}. Всегда сохраняй стиль ответа: {self.__style.tone.persona}.
-            Отвечай не более {self.__style.tone.sentences_max} предложений, избегая {self.__style.tone.avoid} и включая
-            {self.__style.tone.must_include}. Отвечай на {self.__style.task}, используя правила: {self.__style.rules}.
+            {self._style.tone.role} бренда {self._style.brand}. Всегда сохраняй стиль ответа: {self._style.tone.persona}.
+            Отвечай не более {self._style.tone.sentences_max} предложений, избегая {self._style.tone.avoid} и включая
+            {self._style.tone.must_include}. Отвечай на {self._style.task}, используя правила: {self._style.rules}.
             Ориентируйся при ответах на часто задаваемые вопросы {faq_data_escaped}, а при вопросах о заказах
             ориентируйся на данные по заказам из {orders_data_escaped}
-            При ответе используй чёткий формат ответа: {self.__style.format.fields}
+            При ответе используй чёткий формат ответа: {self._style.format.fields}
             '''
 
         return ChatPromptTemplate.from_messages([
@@ -139,7 +139,7 @@ class CliBot:
                     msg="Бот: Контекст диалога очищен."
                 )
                 continue
-            faq_matching_entry = next((item for item in self.__faq if item["q"] == user_text), None)
+            faq_matching_entry = next((item for item in self._faq if item["q"] == user_text), None)
             if faq_matching_entry:
                 self._chat_and_log(
                     event="faq_reply",
@@ -149,10 +149,10 @@ class CliBot:
             if user_text.startswith("/orders"):
                 try:
                     order_number = user_text.split(" ")[1]
-                    if order_number.isdigit() and order_number in self.__orders:
+                    if order_number.isdigit() and order_number in self._orders:
                         self._chat_and_log(
                             event="order_reply",
-                            msg=f"Бот: {self.__orders.get(order_number, None)}"
+                            msg=f"Бот: {self._orders.get(order_number, None)}"
                         )
                     else:
                         self._chat_and_log(
@@ -219,7 +219,6 @@ class CliBot:
             )
 
     def _process_user_input(self):
-        user_text = None
         try:
             user_text = input("Вы: ").strip()
             self.logger.info(
@@ -244,13 +243,13 @@ class CliBot:
         return user_text
 
     @classmethod
-    def __get_faq_info(cls):
+    def _get_faq_info(cls):
         with open('data/faq.json', 'r', encoding='utf-8') as f:
             faq_data_obj = json.load(f)
         return faq_data_obj
 
     @classmethod
-    def __get_orders_info(cls):
+    def _get_orders_info(cls):
         with open('data/orders.json', 'r', encoding='utf-8') as f:
             orders_data_obj = json.load(f)
         return orders_data_obj
