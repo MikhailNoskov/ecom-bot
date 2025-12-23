@@ -1,12 +1,12 @@
 import os, json, pathlib, re, statistics
 from typing import List
 from dotenv import load_dotenv
-from pydantic import BaseModel, Field
 from langchain_openai import ChatOpenAI
 from langchain_core.prompts import ChatPromptTemplate
-from .brand_chain import ask
-from app_lc import STYLE, BASE
 
+from brand_chain import ask
+from app_lc import STYLE, BASE
+from schemas import Grade
 
 load_dotenv(BASE / ".env", override=True)
 REPORTS = BASE / "reports"
@@ -26,10 +26,6 @@ def rule_checks(text: str) -> int:
         score -= 10
     return max(score, 0)
 
-# LLM-оценка
-class Grade(BaseModel):
-    score: int = Field(..., ge=0, le=100)
-    notes: str
 
 LLM = ChatOpenAI(model=os.getenv("OPENAI_MODEL","gpt-4o-mini"), temperature=0)
 
@@ -40,9 +36,11 @@ GRADE_PROMPT = ChatPromptTemplate.from_messages([
     ("human", "Ответ ассистента:\n{answer}\n\nДай целочисленный score 0..100 и краткие заметки почему.")
 ])
 
+
 def llm_grade(text: str) -> Grade:
     parser = LLM.with_structured_output(Grade)
-    return (GRADE_PROMPT | parser).invoke({"answer": text})
+    return Grade(**(GRADE_PROMPT | parser).invoke({"answer": text}))
+
 
 def eval_batch(prompts: List[str]) -> dict:
     results = []

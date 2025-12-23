@@ -1,5 +1,5 @@
 from typing import List, Dict
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class ToneSchema(BaseModel):
@@ -16,8 +16,10 @@ class FieldsSchema(BaseModel):
     tone: str
     actions: str
 
+
 class FormatSchema(BaseModel):
     fields: FieldsSchema
+
 
 class StyleSchema(BaseModel):
     brand: str
@@ -27,7 +29,13 @@ class StyleSchema(BaseModel):
     fallback: Dict[str, str]
     format: FormatSchema
 
+
 class ReplySchema(BaseModel):
     answer: str
     tone: str = None
     actions: str = None
+
+
+class Grade(BaseModel):
+    score: int = Field(..., ge=0, le=100)
+    notes: str
