@@ -4,7 +4,7 @@ from dotenv import load_dotenv
 from pydantic import BaseModel, Field
 from langchain_openai import ChatOpenAI
 from langchain_core.prompts import ChatPromptTemplate
-from brand_chain import ask
+from .brand_chain import ask
 from app_lc import STYLE, BASE
 
 
@@ -68,6 +68,7 @@ def eval_batch(prompts: List[str]) -> dict:
 
 if __name__ == "__main__":
     eval_prompts = (BASE / "data/eval_prompts.txt").read_text(encoding="utf-8").strip().splitlines()
+    print(eval_prompts)
     report = eval_batch(eval_prompts)
     print("Средний балл:", report["mean_final"])
     print("Отчёт:", REPORTS / "style_eval.json")
