@@ -26,3 +26,8 @@ class StyleSchema(BaseModel):
     rules: List[str]
     fallback: Dict[str, str]
     format: FormatSchema
+
+class ReplySchema(BaseModel):
+    answer: str
+    tone: str = None
+    actions: str = None
