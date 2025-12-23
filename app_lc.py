@@ -1,6 +1,8 @@
 import json
+import yaml
 import os
 import sys
+import pathlib
 import logging
 import uuid
 from pythonjsonlogger.json import JsonFormatter
@@ -11,8 +13,15 @@ from langchain_core.chat_history import InMemoryChatMessageHistory
 from langchain_core.runnables.history import RunnableWithMessageHistory
 from langchain_openai import ChatOpenAI
 
+from schemas import StyleSchema
+
+
 load_dotenv()
 
+BASE = pathlib.Path(__file__).parent
+
+with open("data/style_guide.yaml", "r", encoding="utf-8") as f:
+    STYLE = yaml.safe_load(f)
 
 class UnicodeJsonFormatter(JsonFormatter):
     def jsonify_log_record(self, log_record):
@@ -51,6 +60,7 @@ class CliBot:
         self.history_store = {}
         self.__faq = self.__get_faq_info()
         self.__orders = self.__get_orders_info()
+        self.__style = self.__get_style()
         self.prompt = self.__update_system_prompt()
         self.chain = self.prompt | self.chat_model
         self.chain_with_history = RunnableWithMessageHistory(
@@ -61,14 +71,21 @@ class CliBot:
         )
         self.logger = setup_jsonl_logger(self.session_uuid)
 
+    @classmethod
+    def __get_style(cls):
+        return StyleSchema(**STYLE)
+
     def __update_system_prompt(self):
         faq_data_escaped = json.dumps(self.__faq, ensure_ascii=False, indent=2).replace('{', '{{').replace('}', '}}')
         orders_data_escaped = json.dumps(self.__orders, ensure_ascii=False, indent=2).replace('{', '{{').replace('}',
                                                                                                                    '}}')
         system_prompt = f'''
-            Ты полезный ассистент интернет магазина. Ты всегда дружелёбен и вежлив. Отвечай иеформативно, но сжато.
-            Ориентируйся при ответах на часто задаваемые вопросы {faq_data_escaped}, а при получении команды вида /orders 00000
+            {self.__style.tone.role} бренда {self.__style.brand}. Всегда сохраняй стиль ответа: {self.__style.tone.persona}.
+            Отвечай не более {self.__style.tone.sentences_max} предложений, избегая {self.__style.tone.avoid} и включая
+            {self.__style.tone.must_include}. Отвечай на {self.__style.task}, используя правила: {self.__style.rules}.
+            Ориентируйся при ответах на часто задаваемые вопросы {faq_data_escaped}, а при вопросах о заказах
             ориентируйся на данные по заказам из {orders_data_escaped}
+            При ответе используй чёткий формат ответа: {self.__style.format.fields}
             '''
 
         return ChatPromptTemplate.from_messages([
