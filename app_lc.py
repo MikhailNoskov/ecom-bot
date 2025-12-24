@@ -8,10 +8,11 @@ import uuid
 from pythonjsonlogger.json import JsonFormatter
 from dotenv import load_dotenv
 
-from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
+from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder, PromptTemplate
 from langchain_core.chat_history import InMemoryChatMessageHistory
 from langchain_core.runnables.history import RunnableWithMessageHistory
 from langchain_openai import ChatOpenAI
+from langchain_huggingface import HuggingFaceEmbeddings
 
 from schemas import StyleSchema
 
@@ -85,7 +86,6 @@ class CliBot:
             {self._style.tone.must_include}. Отвечай на {self._style.task}, используя правила: {self._style.rules}.
             Ориентируйся при ответах на часто задаваемые вопросы {faq_data_escaped}, а при вопросах о заказах
             ориентируйся на данные по заказам из {orders_data_escaped}
-            При ответе используй чёткий формат ответа: {self._style.format.fields}
             '''
 
         return ChatPromptTemplate.from_messages([
@@ -175,13 +175,11 @@ class CliBot:
                     continue
             #Model reply
             try:
-                response = self.chain_with_history.invoke(
-                    {"question": user_text},
-                    {"configurable": {"session_id": self.session_uuid}}
-                )
+                response = self._get_llm_reply(user_text)
             except Exception as err:
                 self._chat_and_log(
                     event="error",
+                    msg="Бот: Возникла непредвиденная ошибка",
                     err_msg=str(err),
                     log_level=logging.ERROR
                 )
@@ -196,6 +194,29 @@ class CliBot:
                 msg=f"Бот: {bot_reply}",
                 usage=response_meta
             )
+
+    def _get_llm_reply(self, text):
+        embeddings = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
+        example_prompt = PromptTemplate.from_template("user:{question}\nassistant: {answer}")
+        examples = self._get_samples()
+        print(examples)
+        # example_selector = SemanticSimilarityExampleSelector.from_examples(
+        #     examples=examples,
+        #     embeddings=embeddings,
+        #     vectorstore_cls=Chroma,
+        #     k=2
+        # )
+        # prompt = FewShotPromptTemplate(
+        #     example_selector=example_selector,
+        #     example_prompt=example_prompt,
+        #     prefix="Отвечай на вопросы в шутливо-ироничном стиле, как в примерах:",
+        #     suffix="Вопрос: {question}\nОтвет:",
+        #     input_variables=["question"]
+        # )
+        return self.chain_with_history.invoke(
+            {"question": text},
+            {"configurable": {"session_id": self.session_uuid}}
+        )
 
     def _chat_and_log(
             self,
@@ -254,10 +275,16 @@ class CliBot:
             orders_data_obj = json.load(f)
         return orders_data_obj
 
+    @classmethod
+    def _get_samples(cls):
+        with open('data/few_shots.jsonl', 'r', encoding='utf-8') as f:
+            return [json.loads(line) for line in f if line.strip()]
+
 
 def main():
     session_uuid = uuid.uuid4()
     CliBot(session_uuid)()
+
 
 if __name__ == "__main__":
     sys.exit(main())
