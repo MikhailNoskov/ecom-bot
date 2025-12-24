@@ -48,7 +48,7 @@ def eval_batch(prompts: List[str]) -> dict:
         reply = ask(p)
         rule = rule_checks(reply.answer)
         g = llm_grade(reply.answer)
-        final = int(0.4 * rule + 0.6 * g.score)
+        final = int(0.5 * rule + 0.5 * g.score)
         results.append({
             "prompt": p,
             "answer": reply.answer,
