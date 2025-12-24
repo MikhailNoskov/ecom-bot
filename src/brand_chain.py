@@ -1,10 +1,18 @@
+import json
+
+from langchain_core.output_parsers import JsonOutputParser
+from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
+
 from app_lc import CliBot
 from schemas import ReplySchema
+
 
 class DemoBot(CliBot):
     def __init__(self, session_id, question, *args, **kwargs):
         super().__init__(session_id)
         self.__user_question = question
+        self.output_parser = JsonOutputParser(pydantic_object=ReplySchema)
+        self.chain_with_history = self.chain_with_history | self.output_parser
 
     def __call__(self, *args, **kwargs):
         msg = self.__user_question.lower()
@@ -33,12 +41,26 @@ class DemoBot(CliBot):
             )
         except Exception as err:
             return ReplySchema(answer=str(err))
-        bot_reply = response.content.strip()
-        response_meta = response.response_metadata.get("token_usage", None)
-        if response_meta is not None:
-            del response_meta["completion_tokens_details"]
-            del response_meta["prompt_tokens_details"]
-        return ReplySchema(**bot_reply)
+        return response
+
+    def _update_system_prompt(self):
+        faq_data_escaped = json.dumps(self._faq, ensure_ascii=False, indent=2).replace('{', '{{').replace('}', '}}')
+        orders_data_escaped = json.dumps(self._orders, ensure_ascii=False, indent=2).replace('{', '{{').replace('}',
+                                                                                                                   '}}')
+        system_prompt = f'''
+            {self._style.tone.role} бренда {self._style.brand}. Всегда сохраняй стиль ответа: {self._style.tone.persona}.
+            Отвечай не более {self._style.tone.sentences_max} предложений, избегая {self._style.tone.avoid} и включая
+            {self._style.tone.must_include}. Отвечай на {self._style.task}, используя правила: {self._style.rules}.
+            Ориентируйся при ответах на часто задаваемые вопросы {faq_data_escaped}, а при вопросах о заказах
+            ориентируйся на данные по заказам из {orders_data_escaped}
+            При ответе используй чёткий формат ответа: {self._style.format.fields}
+            '''
+
+        return ChatPromptTemplate.from_messages([
+            ("system", system_prompt),
+            MessagesPlaceholder(variable_name="history"),
+            ("human", "{question}"),
+        ])
 
 
 def ask(question: str) -> ReplySchema:
