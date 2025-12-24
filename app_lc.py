@@ -8,16 +8,20 @@ import uuid
 from pythonjsonlogger.json import JsonFormatter
 from dotenv import load_dotenv
 
-from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder, PromptTemplate
+from langchain_core.example_selectors import SemanticSimilarityExampleSelector
+from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder, PromptTemplate, FewShotPromptTemplate
 from langchain_core.chat_history import InMemoryChatMessageHistory
 from langchain_core.runnables.history import RunnableWithMessageHistory
+from langchain_community.vectorstores import Chroma
 from langchain_openai import ChatOpenAI
 from langchain_huggingface import HuggingFaceEmbeddings
 
 from schemas import StyleSchema
 
+__import__('pysqlite3')
 
 load_dotenv()
+sys.modules['sqlite3'] = sys.modules.pop('pysqlite3')
 
 BASE = pathlib.Path(__file__).parent
 
@@ -197,26 +201,26 @@ class CliBot:
 
     def _get_llm_reply(self, text):
         embeddings = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
-        example_prompt = PromptTemplate.from_template("user:{question}\nassistant: {answer}")
+        example_prompt = PromptTemplate.from_template("Вопрос: {question}\nОтвет: {answer}")
         examples = self._get_samples()
-        print(examples)
-        # example_selector = SemanticSimilarityExampleSelector.from_examples(
-        #     examples=examples,
-        #     embeddings=embeddings,
-        #     vectorstore_cls=Chroma,
-        #     k=2
-        # )
-        # prompt = FewShotPromptTemplate(
-        #     example_selector=example_selector,
-        #     example_prompt=example_prompt,
-        #     prefix="Отвечай на вопросы в шутливо-ироничном стиле, как в примерах:",
-        #     suffix="Вопрос: {question}\nОтвет:",
-        #     input_variables=["question"]
-        # )
-        return self.chain_with_history.invoke(
-            {"question": text},
+        example_selector = SemanticSimilarityExampleSelector.from_examples(
+            examples=examples,
+            embeddings=embeddings,
+            vectorstore_cls=Chroma,
+            k=2
+        )
+        prompt = FewShotPromptTemplate(
+            example_selector=example_selector,
+            example_prompt=example_prompt,
+            suffix="Вопрос: {question}\nОтвет:",
+            input_variables=["question"]
+        )
+        formatted_prompt = prompt.format(question=text)
+        reply = self.chain_with_history.invoke(
+            {"question": formatted_prompt},
             {"configurable": {"session_id": self.session_uuid}}
         )
+        return reply
 
     def _chat_and_log(
             self,
