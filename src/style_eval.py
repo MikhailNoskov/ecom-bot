@@ -4,7 +4,7 @@ from dotenv import load_dotenv
 from langchain_openai import ChatOpenAI
 from langchain_core.prompts import ChatPromptTemplate
 
-from brand_chain import ask
+from .brand_chain import ask
 from app_lc import STYLE, BASE
 from schemas import Grade
 
@@ -27,7 +27,7 @@ def rule_checks(text: str) -> int:
     return max(score, 0)
 
 
-LLM = ChatOpenAI(model=os.getenv("OPENAI_MODEL","gpt-4o-mini"), temperature=0)
+LLM = ChatOpenAI(model=os.getenv("EVAL_MODEL_NAME","gpt-4o-mini"), temperature=0)
 
 GRADE_PROMPT = ChatPromptTemplate.from_messages([
     ("system", f"Ты — строгий ревьюер соответствия голосу бренда {STYLE['brand']}"),
@@ -39,7 +39,7 @@ GRADE_PROMPT = ChatPromptTemplate.from_messages([
 
 def llm_grade(text: str) -> Grade:
     parser = LLM.with_structured_output(Grade)
-    return Grade(**(GRADE_PROMPT | parser).invoke({"answer": text}))
+    return (GRADE_PROMPT | parser).invoke({"answer": text})
 
 
 def eval_batch(prompts: List[str]) -> dict:
