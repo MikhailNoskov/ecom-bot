@@ -1,20 +1,47 @@
-import json
+import uuid
 
 from langchain_core.output_parsers import JsonOutputParser
-from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 
 from app_lc import CliBot
 from schemas import ReplySchema, UsageSchema
 
 
 class DemoBot(CliBot):
+    """Демонстрационная версия CLI-бота для однократного вызова без интерактивного цикла.
+
+    Наследуется от `CliBot`, но вместо ожидания пользовательского ввода в цикле
+    обрабатывает единственный предопределённый вопрос и сразу возвращает структурированный ответ.
+    Используется в тестировании и автоматической оценке (`eval_batch`).
+
+    Все ветки логики (FAQ, заказы, команды) сохранены, но исторический контекст не обновляется,
+    а метрики использования токенов для не-LLM ответов подставляются как нулевые.
+    """
     def __init__(self, session_id, question, *args, **kwargs):
+        """Инициализирует демонстрационного бота с фиксированным вопросом.
+
+        Args:
+            session_id: Идентификатор сессии (может быть произвольным, например, 111).
+            question (str): Вопрос, который бот должен обработать без интерактивного ввода.
+        """
         super().__init__(session_id)
         self.__user_question = question
         self.output_parser = JsonOutputParser(pydantic_object=ReplySchema)
-        # self.chain_with_history = self.chain_with_history | self.output_parser
 
     def __call__(self, *args, **kwargs):
+        """Обрабатывает сохранённый вопрос и возвращает ответ в виде ReplySchema.
+
+        Поддерживает те же команды и логику, что и интерактивный `CliBot`:
+        - завершение ('выход', 'стоп', 'конец'),
+        - сброс контекста ('сброс', 'обновить'),
+        - точное совпадение с FAQ,
+        - запросы к заказам через '/orders <номер>',
+        - и, в остальных случаях, генерацию через LLM.
+
+        Для всех путей, не использующих LLM, подставляется нулевая метрика использования токенов.
+
+        Returns:
+            ReplySchema: Ответ с полями `answer`, `tone`, `actions`, `usage`.
+        """
         msg = self.__user_question.lower()
         empty_usage = UsageSchema(completion_tokens=0, prompt_tokens=0, total_tokens=0)
         if msg in ("выход", "стоп", "конец"):
@@ -50,28 +77,20 @@ class DemoBot(CliBot):
             return ReplySchema(answer=str(err), usage=empty_usage)
         return response
 
-    # def _update_system_prompt(self):
-    #     faq_data_escaped = json.dumps(self._faq, ensure_ascii=False, indent=2).replace('{', '{{').replace('}', '}}')
-    #     orders_data_escaped = json.dumps(self._orders, ensure_ascii=False, indent=2).replace('{', '{{').replace('}',
-    #                                                                                                                '}}')
-    #     system_prompt = f'''
-    #         {self._style.tone.role} бренда {self._style.brand}. Всегда сохраняй стиль ответа: {self._style.tone.persona}.
-    #         Отвечай не более {self._style.tone.sentences_max} предложений, избегая {self._style.tone.avoid} и включая
-    #         {self._style.tone.must_include}. Отвечай на {self._style.task}, используя правила: {self._style.rules}.
-    #         Ориентируйся при ответах на часто задаваемые вопросы {faq_data_escaped}, а при вопросах о заказах
-    #         ориентируйся на данные по заказам из {orders_data_escaped}
-    #         При ответе используй чёткий формат ответа: {self._style.format.fields}
-    #         '''
-    #
-    #     return ChatPromptTemplate.from_messages([
-    #         ("system", system_prompt),
-    #         MessagesPlaceholder(variable_name="history"),
-    #         ("human", "{question}"),
-    #     ])
-
 
 def ask(question: str) -> ReplySchema:
-    bot = DemoBot(111, question)
+    """Упрощённый интерфейс для получения ответа от бота на один вопрос.
+
+    Создаёт временный экземпляр `DemoBot` с фиксированным session_id
+    и возвращает результат обработки заданного вопроса.
+
+    Args:
+        question (str): Входной вопрос пользователя.
+
+    Returns:
+        ReplySchema: Строго типизированный ответ от бота.
+    """
+    bot = DemoBot(uuid.UUID('441c8040-ad85-4022-9acc-8b02405b3930'), question)
     return bot()
 
 
