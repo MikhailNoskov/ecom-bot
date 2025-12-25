@@ -30,10 +30,17 @@ class StyleSchema(BaseModel):
     format: FormatSchema
 
 
-class ReplySchema(BaseModel):
+class UsageSchema(BaseModel):
+    completion_tokens: int | None = 0
+    prompt_tokens: int | None = 0
+    total_tokens: int | None = 0
+
+
+class ReplySchema(FieldsSchema):
     answer: str
-    tone: str = None
-    actions: str = None
+    tone: str | None = None
+    actions: List[str] = []
+    usage: UsageSchema
 
 
 class Grade(BaseModel):
